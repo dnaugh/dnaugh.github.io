@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drew's Flight Deck</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Drew, AI-assisted development. Six products built end to end, presented as a spacecraft heads-up display.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: a cockpit display. A deep starfield and a wireframe world sit outside the canopy; every panel is a chamfered
+   HUD frame with corner brackets and a readout strip. Single deliberate dark look, left-aligned, data in mono. */
+:root {
+  --void: #04070d;
+  --deep: #081321;
+  --panel: rgba(8, 22, 38, .72);
+  --panel-2: rgba(10, 30, 52, .55);
+  --line: rgba(92, 214, 255, .28);
+  --line-hi: rgba(92, 214, 255, .7);
+  --holo: #5cd6ff;
+  --holo-soft: rgba(92, 214, 255, .12);
+  --ink: #e6f4ff;
+  --muted: #8fb0c8;
+  --amber: #ffb547;
+  --green: #6dffb4;
+  --red: #ff6b5c;
+
+  --display: "Chakra Petch", "Eurostile", "Bank Gothic", "Segoe UI", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Share Tech Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --cut: 18px;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.55rem;
+  --step-3: clamp(1.9rem, 1.3rem + 2.2vw, 2.8rem);
+  --step-4: clamp(2.5rem, 1.3rem + 5vw, 5.2rem);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: radial-gradient(90% 70% at 70% 20%, #0b1d33 0%, var(--void) 65%) fixed, var(--void);
+  color: var(--ink); font-family: var(--body); font-size: var(--step-0); line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  overflow-x: hidden;
+}
+/* faint scanlines over the whole canopy */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px);
+  mix-blend-mode: screen;
+}
+a { color: var(--holo); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; text-wrap: balance; }
+p { margin: 0; }
+.mono { font-family: var(--mono); letter-spacing: .06em; }
+
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; opacity: var(--scene-o, 1); pointer-events: none; }
+#labels { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: var(--label-o, 1); }
+#labels[hidden] { display: none; }
+#labels a {
+  position: absolute; left: 0; top: 0; pointer-events: auto; text-decoration: none; color: var(--holo);
+  font: 500 .74rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+  padding: 6px 9px 6px 20px; border: 1px solid var(--line); background: rgba(4, 12, 22, .7);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+#labels a::before { content: ""; position: absolute; left: 7px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border: 1px solid var(--amber); transform: rotate(45deg); }
+#labels a:hover, #labels a:focus-visible { color: var(--ink); border-color: var(--line-hi); }
+
+/* reticle that tracks the world in the hero */
+#reticle { position: fixed; z-index: 1; width: 440px; height: 440px; left: 0; top: 0; pointer-events: none; opacity: var(--label-o, 1); transform: translate(-50%, -50%); }
+#reticle[hidden] { display: none; }
+
+.wrap { position: relative; z-index: 2; max-width: 1200px; margin: 0 auto; }
+
+/* HUD frame: chamfered corners plus bracket marks */
+.frame-hud, .study, .section {
+  position: relative; background: var(--panel);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 0 40px rgba(92, 214, 255, .05);
+}
+.brackets::before, .brackets::after {
+  content: ""; position: absolute; width: 22px; height: 22px; pointer-events: none; border: 2px solid var(--holo); opacity: .85;
+}
+.brackets::before { right: 8px; top: 8px; border-left: 0; border-bottom: 0; }
+.brackets::after { left: 8px; bottom: 8px; border-right: 0; border-top: 0; }
+
+/* top bar */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; padding-block: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.callsign { display: grid; line-height: 1.2; color: var(--ink); text-decoration: none; }
+.callsign b { font-family: var(--display); font-weight: 700; font-size: 1.25rem; letter-spacing: .04em; }
+.callsign span { font-family: var(--mono); font-size: .76rem; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+.top nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.top nav a { font: 500 .8rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-decoration: none; padding: 9px 12px; border: 1px solid transparent; }
+.top nav a:hover { color: var(--holo); border-color: var(--line); }
+.sys { display: flex; gap: 18px; font: .74rem/1.3 var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; flex-wrap: wrap; }
+.sys b { color: var(--green); font-weight: 400; }
+.sys .blink { color: var(--holo); }
+
+/* hero */
+.hero { padding-block: clamp(44px, 9vw, 112px) clamp(28px, 4vw, 44px); display: grid; gap: 26px; max-width: 720px; }
+.hero .tag { font: .8rem/1 var(--mono); letter-spacing: .16em; color: var(--amber); text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.hero .tag::before { content: ""; width: 28px; height: 1px; background: var(--amber); }
+.hero h1 { font-size: var(--step-4); font-weight: 700; letter-spacing: .01em; text-transform: uppercase; text-shadow: 0 0 24px rgba(92, 214, 255, .35); }
+.hero h1 span { display: block; }
+.hero h1 .thin { font-weight: 400; color: var(--holo); }
+.hero .lede { font-size: var(--step-1); color: var(--muted); max-width: 56ch; }
+.hero .lede b { color: var(--ink); font-weight: 600; }
+
+.gauges { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 0; }
+.gauge { padding: 16px 16px 14px; display: grid; gap: 6px; border-left: 1px solid var(--line); min-width: 0; }
+.gauge:first-child { border-left: 0; padding-left: 22px; }
+.gauge .k { font: .7rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.gauge b { font-family: var(--display); font-weight: 600; font-size: clamp(1.4rem, 1rem + 1.3vw, 2rem); line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.seg { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; height: 5px; }
+.seg i { background: var(--holo-soft); }
+.seg i.on { background: var(--holo); box-shadow: 0 0 6px var(--holo); }
+.gauge-note { font: .74rem/1.4 var(--mono); color: var(--muted); letter-spacing: .04em; }
+
+.index { display: flex; flex-wrap: wrap; gap: 8px; }
+.index a {
+  display: inline-flex; gap: 10px; align-items: baseline; padding: 9px 14px; text-decoration: none; color: var(--ink);
+  background: rgba(6, 16, 28, .7); box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.index a:hover { box-shadow: inset 0 0 0 1px var(--line-hi); }
+.index b { font-family: var(--display); font-weight: 600; letter-spacing: .03em; }
+.index span { font: .72rem/1 var(--mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+
+/* case studies as mission files */
+.studies { display: grid; gap: clamp(36px, 6vw, 64px); padding-block: clamp(40px, 8vw, 88px); }
+.study { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); scroll-margin-top: 16px; --cut: 26px; }
+.study.flip .copy { order: 2; }
+.study.flip .media { order: 1; }
+.filebar {
+  grid-column: 1 / -1; order: -1; display: flex; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; align-items: center;
+  padding: 10px clamp(20px, 3vw, 36px) 10px calc(clamp(20px, 3vw, 36px) + 10px); border-bottom: 1px solid var(--line);
+  font: .74rem/1.3 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  background: linear-gradient(90deg, rgba(92, 214, 255, .1), transparent 60%);
+}
+.filebar .id { color: var(--holo); }
+.filebar .sweep { flex: 1 1 120px; height: 1px; background: linear-gradient(90deg, var(--line-hi), transparent); min-width: 60px; }
+.copy { padding: clamp(22px, 3.4vw, 40px); display: grid; gap: 20px; align-content: start; min-width: 0; }
+.study-head { display: grid; gap: 10px; }
+.meta { display: flex; gap: 6px 16px; flex-wrap: wrap; align-items: center; font: .78rem/1.4 var(--mono); letter-spacing: .06em; color: var(--muted); }
+.study h2 { font-size: var(--step-3); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; text-shadow: 0 0 18px rgba(92, 214, 255, .25); }
+.tagline { font-family: var(--display); font-size: var(--step-1); font-weight: 500; color: var(--holo); }
+.problem { color: var(--muted); }
+.copy h3 { font: .78rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin-bottom: 12px; font-weight: 400; }
+.copy ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; font-size: .97rem; }
+.copy li { padding-left: 22px; position: relative; }
+.copy li::before { content: ""; position: absolute; left: 2px; top: .5em; width: 8px; height: 8px; border: 1px solid var(--holo); transform: rotate(45deg); }
+.copy li b { font-weight: 600; color: var(--ink); }
+.nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); background: rgba(92, 214, 255, .04); }
+.nums div { padding: 10px 14px; display: grid; min-width: 0; }
+.nums div + div { border-left: 1px solid var(--line); }
+.nums b { font-family: var(--display); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.nums span { font: .7rem/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { font: .74rem/1 var(--mono); letter-spacing: .04em; padding: 6px 9px; border: 1px solid var(--line); color: var(--ink); background: rgba(92, 214, 255, .05); }
+.status { display: inline-flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: .1em; }
+.status::before { content: ""; width: 7px; height: 7px; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.status.shipped { color: var(--green); }
+.status.rc { color: var(--holo); }
+.status.build { color: var(--amber); }
+
+.media { background: var(--panel-2); padding: clamp(16px, 2.6vw, 30px); display: grid; gap: 14px; align-content: start; min-width: 0; border-left: 1px solid var(--line); position: relative; }
+.study.flip .media { border-left: 0; border-right: 1px solid var(--line); }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--line); background: #02060c; aspect-ratio: 16 / 10; max-width: 100%;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+.frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(92,214,255,.08), transparent 30%, transparent 80%, rgba(92,214,255,.06)); }
+.frame picture { position: absolute; inset: 0; }
+.frame picture[aria-hidden="true"] { visibility: hidden; }
+.frame img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button {
+  font: .76rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 9px 12px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(4, 12, 22, .6); color: var(--muted);
+}
+.tabs button:hover { color: var(--ink); border-color: var(--line-hi); }
+.tabs button[aria-selected="true"] { color: var(--void); background: var(--holo); border-color: var(--holo); box-shadow: 0 0 14px rgba(92,214,255,.45); }
+.caption { font-size: .88rem; color: var(--muted); }
+.phones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.phone, .wide { display: grid; gap: 6px; margin: 0; min-width: 0; }
+.phone img, .wide img { width: 100%; display: block; border: 1px solid var(--line); }
+.phone img { border-radius: 14px; }
+.phone figcaption, .wide figcaption { font: .72rem/1.4 var(--mono); letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.demo-note { font: .7rem/1.4 var(--mono); color: var(--muted); letter-spacing: .06em; }
+.media-title { font: .78rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); }
+.phases { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: ph; }
+.phases li { counter-increment: ph; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; border: 1px solid var(--line); background: rgba(4, 12, 22, .5); padding: 10px 12px; }
+.phases li::before { content: "P" counter(ph); font: .8rem/1 var(--mono); letter-spacing: .08em; color: var(--holo); border: 1px solid var(--line-hi); display: grid; place-items: center; height: 26px; }
+.phases b { font-family: var(--display); font-weight: 600; display: block; line-height: 1.3; letter-spacing: .02em; }
+.phases span { font-size: .86rem; color: var(--muted); }
+
+.section { padding: clamp(24px, 4vw, 44px); display: grid; gap: 26px; margin-bottom: clamp(40px, 6vw, 72px); --cut: 26px; }
+.section-head h2 { font-size: var(--step-3); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.section-head p { color: var(--muted); max-width: 60ch; margin-top: 8px; }
+.skills { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 18px; }
+.skill { display: grid; gap: 10px; align-content: start; }
+.skill h3 { font: .78rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); font-weight: 400; }
+.practices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 14px; }
+.practice { border-top: 1px solid var(--line-hi); padding-top: 12px; display: grid; gap: 4px; }
+.practice b { font-family: var(--display); font-weight: 600; font-size: var(--step-1); letter-spacing: .02em; }
+.practice span { color: var(--muted); font-size: .95rem; }
+
+.foot { padding-block: 36px 60px; display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; color: var(--muted); border-top: 1px solid var(--line); }
+.foot h2 { font-size: var(--step-2); color: var(--ink); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+
+@media (max-width: 900px) {
+  .study, .study.flip { grid-template-columns: minmax(0, 1fr); }
+  .study.flip .copy { order: 1; }
+  .study .media, .study.flip .media { order: 2; border-left: 0; border-right: 0; border-top: 1px solid var(--line); }
+  .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gauge { border-left: 0; border-top: 1px solid var(--line); padding-left: 16px; }
+  .gauge:first-child { padding-left: 16px; }
+  .gauge:nth-child(-n+2) { border-top: 0; }
+  .gauge:nth-child(even) { border-left: 1px solid var(--line); }
+  .gauge:last-child { grid-column: 1 / -1; border-left: 0; }
+  .sys { display: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+  /* one boot-up moment: the headline and readouts power on like a display warming up */
+  .hero h1 span { animation: power 1.2s steps(1, end) both, glow 1.6s ease-out both; }
+  .hero h1 span:nth-child(2) { animation-delay: .25s, .25s; }
+  .hero h1 span:nth-child(3) { animation-delay: .5s, .5s; }
+  @keyframes power { 0% { opacity: .15; } 8% { opacity: 1; } 12% { opacity: .3; } 20% { opacity: 1; } 26% { opacity: .55; } 32%, 100% { opacity: 1; } }
+  @keyframes glow { from { text-shadow: 0 0 60px rgba(92,214,255,.9); } to { text-shadow: 0 0 24px rgba(92,214,255,.35); } }
+  .seg i.on { animation: fill .5s ease-out both; animation-delay: calc(var(--n) * 45ms + .6s); }
+  @keyframes fill { from { background: var(--holo-soft); box-shadow: none; } }
+  .sys .blink { animation: blink 1.6s steps(2, end) infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  @supports (animation-timeline: view()) {
+    .filebar .sweep { transform-origin: left; animation: sweep linear both; animation-timeline: view(); animation-range: entry 10% cover 30%; }
+    @keyframes sweep { from { transform: scaleX(.05); } to { transform: scaleX(1); } }
+  }
+}
+</style>
+</head>
+<body>
+
+<canvas id="scene" aria-hidden="true"></canvas>
+<svg id="reticle" viewBox="0 0 440 440" aria-hidden="true" hidden>
+  <g fill="none" stroke="#5cd6ff" stroke-width="1">
+    <circle cx="220" cy="220" r="200" stroke-opacity=".22" stroke-dasharray="2 6"/>
+    <g id="ret-spin">
+      <circle cx="220" cy="220" r="176" stroke-opacity=".5" stroke-dasharray="60 22 4 22"/>
+    </g>
+    <path d="M220 8v26M220 406v26M8 220h26M406 220h26" stroke-opacity=".7"/>
+    <path d="M70 70l16 16M370 70l-16 16M70 370l16-16M370 370l-16-16" stroke-opacity=".45"/>
+  </g>
+  <g font-family="Share Tech Mono, monospace" font-size="10" fill="#8fb0c8" letter-spacing="1.5">
+    <text x="232" y="28">HOME NODE</text>
+    <text x="232" y="426">SYNC: E2E ENCRYPTED</text>
+  </g>
+</svg>
+<div id="labels" aria-label="Projects in the scene"></div>
+
+<div class="wrap">
+  <header class="top">
+    <a class="callsign" href="#top"><b>DREW</b><span>AI-assisted development</span></a>
+    <div class="sys" aria-hidden="true"><span>Status <b>All systems nominal</b></span><span class="blink" id="clock">Huntsville, AL</span></div>
+    <nav aria-label="Sections"><a href="#work">Work</a><a href="#skills">Skills</a><a href="#contact">Contact</a></nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="tag">Developer profile</p>
+      <h1 id="hero-title"><span>I build complete</span><span class="thin">products,</span><span>end to end.</span></h1>
+      <p class="lede">I take an idea from a written plan to a shipped, tested and documented product: the data model, the sync and encryption, the interface, the installers and the setup guide. Most of my work is <b>local-first and self-hosted</b>, so it keeps working offline and keeps people's data on hardware they own.</p>
+
+      <div class="gauges frame-hud brackets" aria-label="Totals across all six products">
+        <div class="gauge"><span class="k">Products</span><b>6</b><span class="seg" aria-hidden="true"></span></div>
+        <div class="gauge"><span class="k">Lines of code</span><b>~195k</b><span class="seg" aria-hidden="true"></span></div>
+        <div class="gauge"><span class="k">Tests</span><b>1,400+</b><span class="seg" aria-hidden="true"></span></div>
+        <div class="gauge"><span class="k">Commits</span><b>610</b><span class="seg" aria-hidden="true"></span></div>
+        <div class="gauge"><span class="k">Releases</span><b>17</b><span class="seg" aria-hidden="true"></span></div>
+      </div>
+      <p class="gauge-note">Counted from six repositories, Oct to Nov 2026. Source is private; walkthroughs on request.</p>
+
+      <nav class="index" id="work" aria-label="Projects">
+        <a href="#thirteen"><b>Thirteen</b><span>Planner</span></a>
+        <a href="#steward"><b>Steward</b><span>Service desk</span></a>
+        <a href="#family"><b>Family app</b><span>Home life</span></a>
+        <a href="#hearth"><b>Hearth</b><span>Emergency</span></a>
+        <a href="#tack"><b>Tack</b><span>Planner</span></a>
+        <a href="#truenas"><b>TrueNAS Control</b><span>Server admin</span></a>
+      </nav>
+    </section>
+<div class="studies">
+
+      <article class="study brackets" id="thirteen" aria-labelledby="t-title"><div class="filebar" aria-hidden="true"><span class="id">File TH-2.7</span><span class="sweep"></span><span>Planning software, 6 platforms</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status shipped">Version 2.7.0, 17 releases</span><span>Solo: product, design and engineering</span></div>
+            <h2 id="t-title">Thirteen</h2>
+            <p class="tagline">A quarterly planner and project scheduler, on six platforms.</p>
+          </div>
+          <p class="problem">A year is too long to plan in detail and a week too short to finish anything. Thirteen plans in 13-week cycles: a few goals, one priority each week, one primary task each day and a Sunday review. Projects schedules work bigger than a quarter, the way Microsoft Project does, and teams share boards and knowledge through a server they run.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>Rewrote the core in Rust</b> (records, scheduler, sync, encryption, undo) and verified it against the previous build's recorded answers, including 20,000- and 100,000-task plans, with a speed bar it must meet.</li>
+              <li><b>Critical-path scheduler:</b> early and late dates, total and free slack, constraints and deadlines, checked against fixture projects.</li>
+              <li><b>End-to-end encrypted team sync:</b> keys are made on devices; the Node.js or Rust server and Postgres store only ciphertext. Admin console, roles, device approval, audit trail and a printed recovery key.</li>
+              <li><b>One codebase, six targets</b> with Tauri 2: Windows, Mac, iPhone, iPad, Android and a single-file browser build. Signed auto-updates and published checksums.</li>
+              <li><b>About 70 browser scenario suites</b>, many with several simulated teammates, plus security reviews of the Mac, Windows and Android apps.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>46k</b><span>lines of code</span></div>
+            <div><b>351</b><span>commits</span></div>
+            <div><b>6</b><span>platforms</span></div>
+          </div>
+          <div class="chips"><span>Rust</span><span>WebAssembly</span><span>SolidJS</span><span>TypeScript</span><span>Tauri 2</span><span>Swift</span><span>Kotlin</span><span>Node.js</span><span>Postgres</span><span>Docker</span></div>
+        </div>
+        <div class="media" data-gallery>
+          <div class="frame">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="assets/thirteen/week-dark.jpg"><img src="assets/thirteen/week-light.jpg" alt="Thirteen's week plan: the week's priority above ranked tasks, coloured by status"></picture>
+            <picture aria-hidden="true"><source media="(prefers-color-scheme: dark)" srcset="assets/thirteen/project-dark.jpg"><img src="assets/thirteen/project-light.jpg" alt="A project's schedule as a Gantt chart" loading="lazy"></picture>
+            <picture aria-hidden="true"><source media="(prefers-color-scheme: dark)" srcset="assets/thirteen/team-dark.jpg"><img src="assets/thirteen/team-light.jpg" alt="The Team board: each teammate's priority, week and primary task" loading="lazy"></picture>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Thirteen screens">
+            <button role="tab" aria-selected="true" data-caption="One priority, then up to 13 ranked tasks with five statuses. Drag a task by its number to re-rank it.">The week</button>
+            <button role="tab" aria-selected="false" data-caption="Projects: tasks, links, people and dates, scheduled for you. Tasks you take on arrive in your week.">Projects</button>
+            <button role="tab" aria-selected="false" data-caption="Publishing your week shows teammates your priority and tasks, and nothing else from your planner.">Team board</button>
+          </div>
+          <p class="caption">One priority, then up to 13 ranked tasks with five statuses. Drag a task by its number to re-rank it.</p>
+          <figure class="phone" style="max-width: 46%">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="assets/thirteen/day-phone-dark.jpg"><img src="assets/thirteen/day-phone-light.jpg" alt="A day's plan in the phone app"></picture>
+            <figcaption>The same day on a phone.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="study flip brackets" id="steward" aria-labelledby="s-title"><div class="filebar" aria-hidden="true"><span class="id">File SW-0.9</span><span class="sweep"></span><span>Service desk, self-hosted</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status rc">Version 0.9.0 release candidate</span><span>Solo: product, engineering and docs</span></div>
+            <h2 id="s-title">Steward</h2>
+            <p class="tagline">A self-hosted service desk, sold once and run on the customer's own server.</p>
+          </div>
+          <p class="problem">Small IT teams pay monthly for separate ticketing, asset and knowledge tools. Steward puts all three in one app that customers install and maintain themselves, with a perpetual licence.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>A customization engine</b>: custom fields, lists, forms, rules, modules and terms, with configuration import and export between installs.</li>
+              <li><b>Ticketing</b> by email and portal, a keyboard-driven queue and SLA sweeps; <b>inventory</b> per location with alerts that repeat until stock is back, checked nightly against a ledger.</li>
+              <li><b>Real-time updates</b> with Laravel Reverb; a queue worker and scheduler for mail, SLAs and scheduled reports.</li>
+              <li><b>Ships like a product:</b> production image, offline install bundle, backups with a tested restore, upgrades, health checks and a cryptographically signed offline licence.</li>
+              <li><b>Quality gates:</b> about 400 Pest tests, PHPStan at level 7, and seven customer guides from setup to troubleshooting.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>62k</b><span>lines of code</span></div>
+            <div><b>~400</b><span>tests</span></div>
+            <div><b>8</b><span>build phases</span></div>
+          </div>
+          <div class="chips"><span>PHP 8</span><span>Laravel</span><span>Filament</span><span>Reverb</span><span>Blade</span><span>TypeScript</span><span>Pest</span><span>PHPStan</span><span>Docker</span><span>Terraform</span></div>
+        </div>
+        <div class="media">
+          <p class="media-title">Built in eight phases</p>
+          <ol class="phases">
+            <li><div><b>Customization engine</b><span>Fields, lists, forms, rules, modules, import and export</span></div></li>
+            <li><div><b>Ticketing</b><span>Email and portal, keyboard queue, SLAs</span></div></li>
+            <li><div><b>Assets</b><span>Check-out, files, spreadsheet import with duplicate checks</span></div></li>
+            <li><div><b>Inventory</b><span>Stock per location, repeating low and critical alerts</span></div></li>
+            <li><div><b>Knowledge base</b><span>Typo-tolerant search, suggestions on tickets and in the portal</span></div></li>
+            <li><div><b>Reporting</b><span>Report builder on any field, dashboards, scheduled email</span></div></li>
+            <li><div><b>Branding and portal</b><span>Customer logo and colour, refused if it fails contrast</span></div></li>
+            <li><div><b>Packaging</b><span>Offline bundle, backups, upgrades, signed licence</span></div></li>
+          </ol>
+        </div>
+      </article>
+
+      <article class="study brackets" id="family" aria-labelledby="f-title"><div class="filebar" aria-hidden="true"><span class="id">File FA-P4</span><span class="sweep"></span><span>Household system</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status build">Four phases built</span><span>Solo: product and engineering</span></div>
+            <h2 id="f-title">Family app</h2>
+            <p class="tagline">One private app for a household's tasks, calendar, meals and money.</p>
+          </div>
+          <p class="problem">A busy household juggles chores, kids' routines, school calendars, groceries and a budget across a handful of apps that don't talk to each other. This replaces them with one installable app on a server the family owns, reached only over Tailscale.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>Kitchen-screen kiosk</b> for kids with a PIN, served by allow-listed endpoints that never return dollar amounts or notes; a test enforces it.</li>
+              <li><b>AI capture inbox:</b> forwarded emails are checked for a verified sender, account numbers are masked, and Claude turns them into proposed tasks, events or receipts that an adult approves.</li>
+              <li><b>Zero-based budget</b> with split transactions, bills, a payday cash-flow plan, bank file import with de-duplication, and snowball or avalanche debt payoff. All money is integer cents in a pure, unit-tested core.</li>
+              <li><b>Live updates</b> over server-sent events, background jobs with pg-boss, and passkey sign-in with Face ID.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>55k</b><span>lines of code</span></div>
+            <div><b>~640</b><span>tests</span></div>
+            <div><b>154</b><span>commits</span></div>
+          </div>
+          <div class="chips"><span>React</span><span>TanStack</span><span>Tailwind</span><span>Hono</span><span>Postgres</span><span>Drizzle</span><span>pg-boss</span><span>WebAuthn</span><span>Claude API</span><span>Docker</span></div>
+        </div>
+        <div class="media">
+          <div class="phones">
+            <figure class="phone"><img src="assets/family/today.jpg" alt="Today: inbox suggestions, a task, tonight's dinner and an event"><figcaption>Today, with inbox suggestions</figcaption></figure>
+            <figure class="phone"><img src="assets/family/networth.jpg" alt="Net worth, accounts and a debt payoff plan"><figcaption>Net worth and debt payoff</figcaption></figure>
+          </div>
+          <figure class="wide"><img src="assets/family/kiosk.jpg" alt="The kitchen-screen kiosk: a child's morning routine and chores"><figcaption>The kitchen screen: routines and chores, no money details</figcaption></figure>
+          <p class="demo-note">Captured from the app's end-to-end tests with demo data.</p>
+        </div>
+      </article>
+
+      <article class="study flip brackets" id="hearth" aria-labelledby="h-title"><div class="filebar" aria-hidden="true"><span class="id">File HR-DEV</span><span class="sweep"></span><span>Offline-first family app</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status build">In development</span><span>Solo: product, design and engineering</span></div>
+            <h2 id="h-title">Hearth</h2>
+            <p class="tagline">A family app that still works when the power, phones or internet go down.</p>
+          </div>
+          <p class="problem">Emergency plans live in a drawer and group chats need the internet. Hearth keeps a family's check-ins, plan, contacts, supplies and guides on every phone, so it works with no server and no signal, and one switch puts everyone in crisis mode.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>Local-first by design:</b> every phone holds the whole family's data; devices sync end-to-end encrypted through an Evolu relay on a home NAS.</li>
+              <li><b>Clean architecture:</b> pure, unit-tested domain logic behind ports and adapters; features never import each other, and only one file touches the sync library.</li>
+              <li><b>Tested on real engines:</b> Playwright runs in Chromium and WebKit against the production build, including a two-device sync test.</li>
+              <li>Self-hosting package for TrueNAS with Tailscale and Caddy.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>8.9k</b><span>lines of code</span></div>
+            <div><b>~110</b><span>tests</span></div>
+            <div><b>13</b><span>screens</span></div>
+          </div>
+          <div class="chips"><span>Svelte 5</span><span>TypeScript</span><span>Evolu</span><span>Vite</span><span>Playwright</span><span>PWA</span><span>Caddy</span></div>
+        </div>
+        <div class="media">
+          <div class="phones">
+            <figure class="phone"><img src="assets/hearth/status.jpg" alt="Status board: check in as OK, need help or away, and see everyone's status"><figcaption>Check-ins and the status board</figcaption></figure>
+            <figure class="phone"><img src="assets/hearth/crisis.jpg" alt="Crisis mode: a banner and a prompt to check in"><figcaption>Crisis mode</figcaption></figure>
+            <figure class="phone"><img src="assets/hearth/home.jpg" alt="Home: getting-ready steps, family statuses and messages"><figcaption>Home</figcaption></figure>
+            <figure class="phone"><img src="assets/hearth/guide.jpg" alt="A how-to guide: when the power goes out"><figcaption>The family's own guides</figcaption></figure>
+          </div>
+          <p class="demo-note">Captured from the app's test suite with demo data.</p>
+        </div>
+      </article>
+
+      <article class="study brackets" id="tack" aria-labelledby="k-title"><div class="filebar" aria-hidden="true"><span class="id">File TK-P12</span><span class="sweep"></span><span>Personal planner</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status build">12 build plans done</span><span>Solo: product, design and engineering</span></div>
+            <h2 id="k-title">Tack</h2>
+            <p class="tagline">A calm, private planner that keeps each day pointed at the quarter.</p>
+          </div>
+          <p class="problem">Most planners are either to-do lists or heavy project tools. Tack keeps three things: goals for the quarter, a focus for the week and one main task for the day, then a two-minute course check each week. The quarter is drawn as a sailing chart, each week a tack toward the goal.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>Works offline with no account</b>; optional end-to-end encrypted sync through a relay.</li>
+              <li><b>Reminders that arrive with the app closed:</b> a small self-hosted push server delivered a reminder to a locked iPhone, on time, through Apple's push service.</li>
+              <li><b>Enforced architecture:</b> dependency-cruiser rules, strict type checks with zero warnings, and a written definition of done.</li>
+              <li>Playwright across Chromium, Firefox and WebKit, with screenshots of every screen in both themes at phone and desktop widths.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>17k</b><span>lines of code</span></div>
+            <div><b>~250</b><span>tests</span></div>
+            <div><b>3</b><span>browser engines</span></div>
+          </div>
+          <div class="chips"><span>Svelte 5</span><span>TypeScript</span><span>Evolu</span><span>Web Push</span><span>Vite</span><span>Playwright</span><span>Vitest</span></div>
+        </div>
+        <div class="media" data-gallery>
+          <div class="frame">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="assets/tack/quarter-dark.jpg"><img src="assets/tack/quarter-light.jpg" alt="The quarter as a sailing chart, with each week a tack toward the goals"></picture>
+            <picture aria-hidden="true"><source media="(prefers-color-scheme: dark)" srcset="assets/tack/today-dark.jpg"><img src="assets/tack/today-light.jpg" alt="Today: one main task and a few others" loading="lazy"></picture>
+            <picture aria-hidden="true"><source media="(prefers-color-scheme: dark)" srcset="assets/tack/week-dark.jpg"><img src="assets/tack/week-light.jpg" alt="The week's focus and its tasks" loading="lazy"></picture>
+            <picture aria-hidden="true"><source media="(prefers-color-scheme: dark)" srcset="assets/tack/review-dark.jpg"><img src="assets/tack/review-light.jpg" alt="The weekly course check" loading="lazy"></picture>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Tack screens">
+            <button role="tab" aria-selected="true" data-caption="The quarter as a chart: 13 weeks, each a tack toward the goals.">Quarter</button>
+            <button role="tab" aria-selected="false" data-caption="Today: one main task, set in large type, and a short list of others.">Today</button>
+            <button role="tab" aria-selected="false" data-caption="This week's focus, with tasks linked to goals.">Week</button>
+            <button role="tab" aria-selected="false" data-caption="The two-minute course check: what moved, what didn't, one correction.">Course check</button>
+          </div>
+          <p class="caption">The quarter as a chart: 13 weeks, each a tack toward the goals.</p>
+          <p class="demo-note">Captured from the app's test suite with demo data.</p>
+        </div>
+      </article>
+
+      <article class="study flip brackets" id="truenas" aria-labelledby="n-title"><div class="filebar" aria-hidden="true"><span class="id">File NC-01</span><span class="sweep"></span><span>Server control, mobile</span></div>
+        <div class="copy">
+          <div class="study-head">
+            <div class="meta"><span class="status build">Working build</span><span>Solo: product and engineering</span></div>
+            <h2 id="n-title">TrueNAS Control</h2>
+            <p class="tagline">A phone app for running a home server safely.</p>
+          </div>
+          <p class="problem">TrueNAS's web interface is built for a desktop. This app runs on the NAS itself and gives a phone the everyday controls (health, storage, apps, services, a shell, power), reachable only over Tailscale.</p>
+          <div>
+            <h3>Engineering highlights</h3>
+            <ul>
+              <li><b>Security by default:</b> one-time sign-in links, then passkeys; Face ID required every time the SSH shell opens; type the server's name to restart or shut down; an activity log of who did what.</li>
+              <li><b>Testable without a real server:</b> a fake TrueNAS API and fake SSH server drive the tests, and the end-to-end suite signs in with a virtual Face ID authenticator.</li>
+              <li>An installable PWA and a Hono server in one Docker image, with HTTPS from a Tailscale sidecar.</li>
+            </ul>
+          </div>
+          <div class="nums">
+            <div><b>5k</b><span>lines of code</span></div>
+            <div><b>8</b><span>screens</span></div>
+            <div><b>1</b><span>Docker image</span></div>
+          </div>
+          <div class="chips"><span>TypeScript</span><span>Hono</span><span>PWA</span><span>WebAuthn</span><span>SSH</span><span>Docker</span><span>Tailscale</span><span>Playwright</span></div>
+        </div>
+        <div class="media">
+          <div class="phones">
+            <figure class="phone"><img src="assets/truenas/home.jpg" alt="Home: alerts, CPU and memory, pools"><figcaption>Health at a glance</figcaption></figure>
+            <figure class="phone"><img src="assets/truenas/storage.jpg" alt="Storage: pool usage, disks, errors and temperatures"><figcaption>Pools, disks and temperatures</figcaption></figure>
+            <figure class="phone"><img src="assets/truenas/shell.jpg" alt="An SSH terminal on the NAS with a key bar"><figcaption>SSH shell behind Face ID</figcaption></figure>
+            <figure class="phone"><img src="assets/truenas/power.jpg" alt="Restart confirmation that asks you to type the server's name"><figcaption>Type the name to restart</figcaption></figure>
+          </div>
+          <p class="demo-note">Captured from the end-to-end tests against a simulated NAS.</p>
+        </div>
+      </article>
+    </div>
+
+    <section class="section brackets" id="skills" aria-labelledby="skills-title">
+      <div class="section-head">
+        <h2 id="skills-title">What I work with</h2>
+        <p>The languages and tools across these six products, and the habits they share.</p>
+      </div>
+      <div class="skills">
+        <div class="skill"><h3>Languages</h3><div class="chips"><span>TypeScript</span><span>Rust</span><span>PHP</span><span>Swift</span><span>Kotlin</span><span>SQL</span></div></div>
+        <div class="skill"><h3>Front end</h3><div class="chips"><span>Svelte 5</span><span>SolidJS</span><span>React</span><span>Tailwind</span><span>Vite</span><span>PWAs</span></div></div>
+        <div class="skill"><h3>Back end</h3><div class="chips"><span>Node.js</span><span>Hono</span><span>Laravel</span><span>Postgres</span><span>Drizzle</span><span>WebAssembly</span></div></div>
+        <div class="skill"><h3>Platforms and ops</h3><div class="chips"><span>Tauri 2</span><span>Docker</span><span>Tailscale</span><span>Caddy</span><span>Terraform</span><span>GitHub Actions</span></div></div>
+      </div>
+      <div class="practices">
+        <div class="practice"><b>Plan first, in writing</b><span>Each product starts from a written vision and numbered build plans, and each release has notes.</span></div>
+        <div class="practice"><b>Test at every layer</b><span>Pure domain logic with unit tests, integration tests against real databases, and Playwright on real browser engines.</span></div>
+        <div class="practice"><b>Privacy and security built in</b><span>End-to-end encryption, passkeys, allow-listed data for shared screens, and security reviews before release.</span></div>
+      </div>
+    </section>  </main>
+
+  <footer class="foot" id="contact">
+    <div>
+      <h2>Open a channel</h2>
+      <p>Happy to give a code walkthrough or live demo of any project here.</p>
+    </div>
+    <div><p>GitHub: <a href="https://github.com/dnaugh">github.com/dnaugh</a></p></div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* gauge bars: ten segments that power on in sequence */
+  document.querySelectorAll('.seg').forEach(function (s, g) {
+    var html = '';
+    for (var n = 0; n < 10; n++) html += '<i class="on" style="--n:' + (n + g * 2) + '"></i>';
+    s.innerHTML = html;
+  });
+
+  /* mission clock in the person's local time */
+  var clock = document.getElementById('clock');
+  function tick() {
+    var d = new Date();
+    clock.textContent = 'Local ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+  if (clock) { tick(); setInterval(tick, 1000); }
+
+  /* galleries: the next screen wipes in like a scan line */
+  document.querySelectorAll('[data-gallery]').forEach(function (g) {
+    var tabs = g.querySelectorAll('.tabs button'), shots = g.querySelectorAll('.frame picture'), cap = g.querySelector('.caption'), cur = 0;
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () {
+        if (i === cur) return;
+        var prev = shots[cur], next = shots[i]; cur = i;
+        tabs.forEach(function (x, n) { x.setAttribute('aria-selected', n === i ? 'true' : 'false'); });
+        if (cap) cap.textContent = t.dataset.caption;
+        next.removeAttribute('aria-hidden'); next.style.zIndex = 2; prev.style.zIndex = 1;
+        var done = function () { prev.setAttribute('aria-hidden', 'true'); prev.style.zIndex = ''; next.style.zIndex = ''; };
+        if (reduce.matches || !next.animate) { done(); return; }
+        next.animate([
+          { clipPath: 'inset(0 0 100% 0)', filter: 'brightness(1.8) hue-rotate(-20deg)' },
+          { clipPath: 'inset(0 0 0% 0)', filter: 'brightness(1) hue-rotate(0deg)' }
+        ], { duration: 520, easing: 'cubic-bezier(.5,0,.2,1)' }).onfinish = done;
+      });
+    });
+  });
+
+  var canvas = document.getElementById('scene'), labelLayer = document.getElementById('labels'), reticle = document.getElementById('reticle');
+  function bail() { canvas && canvas.remove(); labelLayer.remove(); reticle.remove(); }
+  if (!window.THREE || !canvas) { bail(); return; }
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true }); } catch (e) { bail(); return; }
+
+  var HOLO = new THREE.Color('#5cd6ff'), AMBER = new THREE.Color('#ffb547');
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
+  camera.position.set(0, 0.6, 10);
+  var world = new THREE.Group(); scene.add(world);
+
+  /* starfield: three depths; stars stretch into streaks when you scroll fast */
+  var STARS = window.innerWidth < 700 ? 900 : 2200;
+  var sg = new THREE.BufferGeometry(), sp = new Float32Array(STARS * 3), ss = new Float32Array(STARS);
+  for (var i = 0; i < STARS; i++) {
+    sp[i * 3] = (Math.random() - 0.5) * 160; sp[i * 3 + 1] = (Math.random() - 0.5) * 100; sp[i * 3 + 2] = -Math.random() * 180 + 8;
+    ss[i] = Math.random();
+  }
+  sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  sg.setAttribute('seed', new THREE.BufferAttribute(ss, 1));
+  var starU = { uTime: { value: 0 }, uWarp: { value: 0 }, uPx: { value: 1 } };
+  var stars = new THREE.Points(sg, new THREE.ShaderMaterial({
+    uniforms: starU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'attribute float seed;uniform float uTime;uniform float uWarp;uniform float uPx;varying float vS;varying float vW;\n' +
+      'void main(){vec3 p=position;p.z=mod(p.z+uTime*(0.6+uWarp*40.0)+180.0,188.0)-180.0;vec4 mv=modelViewMatrix*vec4(p,1.0);' +
+      'vS=seed;vW=uWarp;gl_PointSize=uPx*(1.0+seed*2.2)*(60.0/-mv.z)*(1.0+uWarp*3.0);gl_Position=projectionMatrix*mv;}',
+    fragmentShader: 'varying float vS;varying float vW;void main(){vec2 c=gl_PointCoord-0.5;c.y*=1.0+vW*6.0;float d=length(c);' +
+      'float a=smoothstep(0.5,0.0,d);vec3 col=mix(vec3(0.75,0.9,1.0),vec3(1.0,0.85,0.6),step(0.92,vS));gl_FragColor=vec4(col,a*(0.45+vS*0.55));}'
+  }));
+  scene.add(stars);
+
+  /* the home node: a wireframe world with latitude bands and a scanning ring */
+  var planet = new THREE.Group(); world.add(planet);
+  var wire = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.IcosahedronGeometry(1.6, 3)),
+    new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: 0.22 }));
+  planet.add(wire);
+  var coreMat = new THREE.ShaderMaterial({
+    uniforms: { uC: { value: HOLO } }, transparent: true, depthWrite: false,
+    vertexShader: 'varying vec3 vN;varying vec3 vV;void main(){vec4 mv=modelViewMatrix*vec4(position,1.0);vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}',
+    fragmentShader: 'uniform vec3 uC;varying vec3 vN;varying vec3 vV;void main(){float f=pow(1.0-max(dot(vN,vV),0.0),2.5);gl_FragColor=vec4(uC*(0.15+f*1.2),0.18+f*0.7);}'
+  });
+  planet.add(new THREE.Mesh(new THREE.SphereGeometry(1.56, 48, 48), coreMat));
+  for (var b = -2; b <= 2; b++) {
+    var r = Math.sqrt(1 - Math.pow(b / 3, 2)) * 1.62;
+    var ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.004, 4, 96), new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.35 }));
+    ring.rotation.x = Math.PI / 2; ring.position.y = (b / 3) * 1.62; planet.add(ring);
+  }
+  var scan = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.012, 6, 128), new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: 0.8 }));
+  scan.rotation.x = Math.PI / 2; planet.add(scan);
+
+  /* orbit track and six contacts, one per product */
+  var orbit = new THREE.Group(); world.add(orbit); orbit.rotation.x = 0.42; orbit.rotation.z = -0.12;
+  var R = 3.0;
+  var track = new THREE.Mesh(new THREE.TorusGeometry(R, 0.006, 4, 200), new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.4 }));
+  track.rotation.x = Math.PI / 2; orbit.add(track);
+  var products = [['Thirteen', '#thirteen'], ['Steward', '#steward'], ['Family app', '#family'], ['Hearth', '#hearth'], ['Tack', '#tack'], ['TrueNAS Control', '#truenas']];
+  var contacts = [], anchors = [];
+  var diamond = new THREE.OctahedronGeometry(0.11, 0);
+  products.forEach(function (p, k) {
+    var m = new THREE.Mesh(diamond, new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
+    var halo = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.19, 4), new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+    m.add(halo); m.userData.halo = halo;
+    m.userData.phase = k / products.length * Math.PI * 2; orbit.add(m); contacts.push(m);
+    var a = document.createElement('a'); a.href = p[1]; a.textContent = p[0]; labelLayer.appendChild(a); anchors.push(a);
+  });
+  /* sync beams from each contact to the node */
+  var beamGeo = new THREE.BufferGeometry(), beamPos = new Float32Array(products.length * 6);
+  beamGeo.setAttribute('position', new THREE.BufferAttribute(beamPos, 3));
+  orbit.add(new THREE.LineSegments(beamGeo, new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: 0.18 })));
+
+  var W = 0, H = 0, wide = true;
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight; wide = W > 900;
+    var px = Math.min(window.devicePixelRatio || 1, W < 700 ? 1.5 : 1.75);
+    renderer.setPixelRatio(px); renderer.setSize(W, H, false); starU.uPx.value = px;
+    camera.aspect = W / H; camera.updateProjectionMatrix();
+    world.position.set(wide ? 3.1 : 0, wide ? 0.4 : -3.4, 0);
+    world.scale.setScalar(wide ? 0.95 : 0.72);
+    labelLayer.hidden = !wide; if (wide) reticle.removeAttribute('hidden'); else reticle.setAttribute('hidden', '');
+    render();
+  }
+  var pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  window.addEventListener('pointermove', function (e) { pointer.tx = (e.clientX / W - 0.5) * 2; pointer.ty = (e.clientY / H - 0.5) * 2; }, { passive: true });
+  var sy = window.scrollY, lastSy = sy, warp = 0;
+  window.addEventListener('scroll', function () { sy = window.scrollY; if (reduce.matches) render(); }, { passive: true });
+
+  var v = new THREE.Vector3(), t = 6, running = false, raf = 0, clock3 = new THREE.Clock();
+  var spin = document.getElementById('ret-spin');
+  function place() {
+    var hero = Math.min(1, sy / (H * 0.9));
+    document.documentElement.style.setProperty('--scene-o', ((wide ? 1 : 0.5) * (1 - hero * 0.55)).toFixed(3));
+    document.documentElement.style.setProperty('--label-o', Math.max(0, 1 - hero * 2.2).toFixed(3));
+    labelLayer.style.pointerEvents = hero > 0.4 ? 'none' : '';
+    pointer.x += (pointer.tx - pointer.x) * 0.05; pointer.y += (pointer.ty - pointer.y) * 0.05;
+    camera.position.x = pointer.x * 0.4; camera.position.y = 0.6 - pointer.y * 0.3 - hero * 0.8; camera.position.z = 10 + hero * 3;
+    camera.lookAt(0, 0, 0);
+    planet.rotation.y = t * 0.08; planet.rotation.x = 0.25;
+    scan.position.y = Math.sin(t * 0.7) * 1.4; scan.scale.setScalar(Math.sqrt(Math.max(0.02, 1 - Math.pow(scan.position.y / 1.7, 2))));
+    starU.uTime.value = t; starU.uWarp.value = warp;
+    contacts.forEach(function (m, k) {
+      var a = m.userData.phase + t * 0.1;
+      m.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
+      m.rotation.y = t * 1.2 + k; m.userData.halo.lookAt(camera.position);
+      var o = k * 6; beamPos[o] = 0; beamPos[o + 1] = 0; beamPos[o + 2] = 0; beamPos[o + 3] = m.position.x; beamPos[o + 4] = 0; beamPos[o + 5] = m.position.z;
+      if (wide) {
+        m.getWorldPosition(v); v.project(camera);
+        var x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+        anchors[k].style.transform = 'translate(' + (x + 14).toFixed(1) + 'px,' + (y - 12).toFixed(1) + 'px)';
+        anchors[k].style.visibility = x < W * 0.56 ? 'hidden' : '';
+      }
+    });
+    beamGeo.attributes.position.needsUpdate = true;
+    if (wide) {
+      planet.getWorldPosition(v); v.project(camera);
+      reticle.style.transform = 'translate(' + ((v.x * 0.5 + 0.5) * W - 220).toFixed(1) + 'px,' + ((-v.y * 0.5 + 0.5) * H - 220).toFixed(1) + 'px)';
+      if (spin) spin.setAttribute('transform', 'rotate(' + ((t * 12) % 360).toFixed(2) + ' 220 220)');
+    }
+  }
+  function render() { if (!W) return; place(); renderer.render(scene, camera); }
+  function frame() {
+    raf = requestAnimationFrame(frame);
+    var dt = Math.min(clock3.getDelta(), 0.05); t += dt;
+    var speed = Math.abs(sy - lastSy) / Math.max(dt, 0.001); lastSy = sy;
+    warp += (Math.min(1, speed / 4000) - warp) * 0.08;
+    render();
+  }
+  function start() { if (running || reduce.matches || document.hidden) return; running = true; clock3.getDelta(); raf = requestAnimationFrame(frame); }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', function () { document.hidden ? stop() : start(); });
+  var onMotion = function () { if (reduce.matches) { stop(); render(); } else start(); };
+  reduce.addEventListener ? reduce.addEventListener('change', onMotion) : reduce.addListener(onMotion);
+  reticle.style.left = '0'; reticle.style.top = '0';
+  resize(); start();
+})();
+</script>
+</body>
+</html>
